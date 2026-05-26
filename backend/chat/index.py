@@ -85,8 +85,10 @@ def handler(event: dict, context) -> dict:
     with urllib.request.urlopen(req, timeout=60) as resp:
         result = json.loads(resp.read().decode('utf-8'))
 
-    reply = result['choices'][0]['message']['content']
+    reply = result['choices'][0]['message'].get('content') or ''
     reply = re.sub(r'<think>.*?</think>', '', reply, flags=re.DOTALL).strip()
+    if not reply:
+        reply = 'Модель не вернула ответ, попробуй ещё раз.'
 
     return {
         'statusCode': 200,
