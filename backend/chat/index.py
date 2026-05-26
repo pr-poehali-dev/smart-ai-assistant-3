@@ -1,7 +1,8 @@
 import json
 import os
+import re
 import urllib.request
-import urllib.error
+import psycopg2
 
 SYSTEM_PROMPT = """Ты — АУРА, умный персональный ИИ-ассистент для бизнеса. Ты помогаешь:
 - Управлять задачами и напоминаниями
@@ -17,7 +18,7 @@ SYSTEM_PROMPT = """Ты — АУРА, умный персональный ИИ-�
 
 
 def handler(event: dict, context) -> dict:
-    """Обработка чат-запросов через OpenRouter (nvidia/nemotron-3-nano-omni-30b)."""
+    """Обработка чат-запросов через OpenRouter. Ключ читается из БД."""
 
     if event.get('httpMethod') == 'OPTIONS':
         return {
@@ -31,13 +32,21 @@ def handler(event: dict, context) -> dict:
             'body': ''
         }
 
-    api_key = os.environ.get('OPENROUTER_API_KEY', '')
-    if not api_key:
+    conn = psycopg2.connect(os.environ['DATABASE_URL'])
+    cur = conn.cursor()
+    cur.execute("SELECT value FROM app_settings WHERE key = 'openrouter_key'")
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+
+    if not row:
         return {
-            'statusCode': 500,
+            'statusCode': 402,
             'headers': {'Access-Control-Allow-Origin': '*'},
-            'body': json.dumps({'error': 'OPENROUTER_API_KEY не настроен'})
+            'body': json.dumps({'error': 'no_key', 'message': 'API-ключ не настроен'})
         }
+
+    api_key = row[0]
 
     body = json.loads(event.get('body') or '{}')
     messages = body.get('messages', [])
@@ -77,9 +86,6 @@ def handler(event: dict, context) -> dict:
         result = json.loads(resp.read().decode('utf-8'))
 
     reply = result['choices'][0]['message']['content']
-
-    # Убираем <think>...</think> теги reasoning-моделей
-    import re
     reply = re.sub(r'<think>.*?</think>', '', reply, flags=re.DOTALL).strip()
 
     return {

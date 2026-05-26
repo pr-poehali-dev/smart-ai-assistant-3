@@ -72,7 +72,7 @@ function TypingDots() {
   );
 }
 
-export default function ChatView() {
+export default function ChatView({ onNeedSetup }: { onNeedSetup?: () => void }) {
   const [view, setView] = useState<View>('chat');
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -139,7 +139,9 @@ export default function ChatView() {
         c.id === fId ? { ...c, messages: [...c.messages, { role: 'ai', text: reply }] } : c
       ));
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Ошибка соединения');
+      const msg = e instanceof Error ? e.message : 'Ошибка соединения';
+      if (msg === 'no_key') { onNeedSetup?.(); return; }
+      setError(msg);
     } finally {
       setLoading(false);
       setTimeout(() => inputRef.current?.focus(), 60);
