@@ -2,6 +2,7 @@ import json
 import os
 import re
 import urllib.request
+import urllib.error
 import psycopg2
 
 SYSTEM_PROMPT = """Ты — АУРА, умный персональный ИИ-ассистент для бизнеса. Ты помогаешь:
@@ -63,32 +64,67 @@ def handler(event: dict, context) -> dict:
         role = 'assistant' if msg.get('role') == 'ai' else msg.get('role', 'user')
         chat_messages.append({'role': role, 'content': msg.get('text', '')})
 
-    payload = json.dumps({
-        'model': 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
-        'messages': chat_messages,
-        'max_tokens': 2000,
-        'temperature': 0.7,
-    }).encode('utf-8')
+    models_to_try = [
+        'deepseek/deepseek-chat-v3.1:free',
+        'meta-llama/llama-3.3-70b-instruct:free',
+        'google/gemini-2.0-flash-exp:free',
+    ]
 
-    req = urllib.request.Request(
-        'https://openrouter.ai/api/v1/chat/completions',
-        data=payload,
-        headers={
-            'Authorization': f'Bearer {api_key}',
-            'Content-Type': 'application/json',
-            'HTTP-Referer': 'https://poehali.dev',
-            'X-Title': 'AURA Assistant',
-        },
-        method='POST'
-    )
+    reply = ''
+    last_error = None
 
-    with urllib.request.urlopen(req, timeout=60) as resp:
-        result = json.loads(resp.read().decode('utf-8'))
+    for model_name in models_to_try:
+        payload = json.dumps({
+            'model': model_name,
+            'messages': chat_messages,
+            'max_tokens': 2000,
+            'temperature': 0.7,
+        }).encode('utf-8')
 
-    reply = result['choices'][0]['message'].get('content') or ''
-    reply = re.sub(r'<think>.*?</think>', '', reply, flags=re.DOTALL).strip()
+        req = urllib.request.Request(
+            'https://openrouter.ai/api/v1/chat/completions',
+            data=payload,
+            headers={
+                'Authorization': f'Bearer {api_key}',
+                'Content-Type': 'application/json',
+                'HTTP-Referer': 'https://poehali.dev',
+                'X-Title': 'AURA Assistant',
+            },
+            method='POST'
+        )
+
+        try:
+            with urllib.request.urlopen(req, timeout=55) as resp:
+                result = json.loads(resp.read().decode('utf-8'))
+        except urllib.error.HTTPError as e:
+            err_body = e.read().decode('utf-8', errors='ignore')
+            last_error = f'{model_name}: {e.code} {err_body[:200]}'
+            continue
+        except Exception as e:
+            last_error = f'{model_name}: {str(e)[:200]}'
+            continue
+
+        choices = result.get('choices') or []
+        if not choices:
+            last_error = f'{model_name}: no choices. {json.dumps(result)[:200]}'
+            continue
+
+        message = choices[0].get('message') or {}
+        candidate = message.get('content') or message.get('reasoning') or ''
+        candidate = re.sub(r'<think>.*?</think>', '', candidate, flags=re.DOTALL).strip()
+
+        if candidate:
+            reply = candidate
+            break
+
+        last_error = f'{model_name}: empty response'
+
     if not reply:
-        reply = 'Модель не вернула ответ, попробуй ещё раз.'
+        return {
+            'statusCode': 502,
+            'headers': {'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json'},
+            'body': json.dumps({'error': 'Все модели вернули пустой ответ', 'detail': last_error})
+        }
 
     return {
         'statusCode': 200,
