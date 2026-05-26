@@ -10,14 +10,14 @@ SYSTEM_PROMPT = """Ты — АУРА, умный персональный ИИ-�
 - Анализировать данные и давать советы
 - Отвечать на любые вопросы по бизнесу и продуктивности
 
-Отвечай по-русски, кратко и по делу. Будь дружелюбным, профессиональным. 
+Отвечай по-русски, кратко и по делу. Будь дружелюбным, профессиональным.
 Используй markdown для форматирования: **жирный**, *курсив*, списки с дефисами, заголовки с ##.
-Если тебя просят создать задачу — отвечай в формате: подтверди создание и назови её.
+Если тебя просят создать задачу — подтверди создание и назови её.
 Если просят составить план — структурируй по пунктам."""
 
 
 def handler(event: dict, context) -> dict:
-    """Обработка чат-запросов к OpenAI GPT-4o."""
+    """Обработка чат-запросов через OpenRouter (nvidia/nemotron-3-nano-omni-30b)."""
 
     if event.get('httpMethod') == 'OPTIONS':
         return {
@@ -31,17 +31,17 @@ def handler(event: dict, context) -> dict:
             'body': ''
         }
 
-    api_key = os.environ.get('OPENAI_API_KEY', '')
+    api_key = os.environ.get('OPENROUTER_API_KEY', '')
     if not api_key:
         return {
             'statusCode': 500,
             'headers': {'Access-Control-Allow-Origin': '*'},
-            'body': json.dumps({'error': 'OPENAI_API_KEY не настроен'})
+            'body': json.dumps({'error': 'OPENROUTER_API_KEY не настроен'})
         }
 
     body = json.loads(event.get('body') or '{}')
     messages = body.get('messages', [])
-    
+
     if not messages:
         return {
             'statusCode': 400,
@@ -49,32 +49,38 @@ def handler(event: dict, context) -> dict:
             'body': json.dumps({'error': 'Нет сообщений'})
         }
 
-    openai_messages = [{'role': 'system', 'content': SYSTEM_PROMPT}]
+    chat_messages = [{'role': 'system', 'content': SYSTEM_PROMPT}]
     for msg in messages:
         role = 'assistant' if msg.get('role') == 'ai' else msg.get('role', 'user')
-        openai_messages.append({'role': role, 'content': msg.get('text', '')})
+        chat_messages.append({'role': role, 'content': msg.get('text', '')})
 
     payload = json.dumps({
-        'model': 'gpt-4o-mini',
-        'messages': openai_messages,
-        'max_tokens': 1500,
+        'model': 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
+        'messages': chat_messages,
+        'max_tokens': 2000,
         'temperature': 0.7,
     }).encode('utf-8')
 
     req = urllib.request.Request(
-        'https://api.openai.com/v1/chat/completions',
+        'https://openrouter.ai/api/v1/chat/completions',
         data=payload,
         headers={
             'Authorization': f'Bearer {api_key}',
             'Content-Type': 'application/json',
+            'HTTP-Referer': 'https://poehali.dev',
+            'X-Title': 'АУРА Ассистент',
         },
         method='POST'
     )
 
-    with urllib.request.urlopen(req, timeout=25) as resp:
+    with urllib.request.urlopen(req, timeout=60) as resp:
         result = json.loads(resp.read().decode('utf-8'))
 
     reply = result['choices'][0]['message']['content']
+
+    # Убираем <think>...</think> теги reasoning-моделей
+    import re
+    reply = re.sub(r'<think>.*?</think>', '', reply, flags=re.DOTALL).strip()
 
     return {
         'statusCode': 200,
