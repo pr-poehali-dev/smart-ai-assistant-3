@@ -123,6 +123,43 @@
   }
 }
 
+/* Markdown content in AI messages */
+.prose-ai {
+  line-height: 1.65;
+}
+.prose-ai p {
+  margin-bottom: 0.5rem;
+}
+.prose-ai ul {
+  margin: 0.4rem 0;
+}
+.prose-ai li {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 0.2rem;
+  align-items: flex-start;
+}
+.prose-ai h1,
+.prose-ai h2,
+.prose-ai h3 {
+  margin-top: 0.75rem;
+  margin-bottom: 0.35rem;
+  font-weight: 600;
+  color: hsl(var(--foreground));
+}
+.prose-ai code {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 1px 5px;
+  border-radius: 4px;
+  color: hsl(var(--primary));
+}
+.prose-ai strong {
+  font-weight: 600;
+  color: hsl(var(--foreground));
+}
+
 @keyframes fadeIn {
   from {
     opacity: 0;
