@@ -77,7 +77,7 @@ def handler(event: dict, context) -> dict:
             'Authorization': f'Bearer {api_key}',
             'Content-Type': 'application/json',
             'HTTP-Referer': 'https://poehali.dev',
-            'X-Title': 'АУРА Ассистент',
+            'X-Title': 'AURA Assistant',
         },
         method='POST'
     )
